@@ -172,6 +172,115 @@ public class SaneScanDriverTests : ContextualTests
         Assert.Null(result);
     }
 
+    [Fact]
+    public void ShouldExcludeDeviceByLocalIP_NonLoopbackIp()
+    {
+        var device = new SaneDeviceInfo
+        {
+            Name = "escl:http://192.168.1.9:50000/eSCL"
+        };
+
+        var result = SaneScanDriver.ShouldExcludeDeviceByLocalIP(device, new HashSet<string> { "192.168.1.9" });
+
+        Assert.True(result);
+    }
+
+    [Fact]
+    public void ShouldExcludeDeviceByLocalIP_EsclLoopbackIp()
+    {
+        var device = new SaneDeviceInfo
+        {
+            Name = "escl:http://127.0.0.1:50000/eSCL"
+        };
+
+        var result = SaneScanDriver.ShouldExcludeDeviceByLocalIP(device, new HashSet<string> { "127.0.0.1" });
+
+        Assert.False(result);
+    }
+
+    [Fact]
+    public void ShouldExcludeDeviceByLocalIP_AirscanLoopbackIp()
+    {
+        var device = new SaneDeviceInfo
+        {
+            Name = "airscan:e0:Canon imageFORMULA R10",
+            Type = "ip=127.0.0.1"
+        };
+
+        var result = SaneScanDriver.ShouldExcludeDeviceByLocalIP(device, new HashSet<string> { "127.0.0.1" });
+
+        Assert.False(result);
+    }
+
+    [Fact]
+    public void ShouldExcludeDeviceByLocalIP_AirscanWithoutIpPrefix()
+    {
+        var device = new SaneDeviceInfo
+        {
+            Name = "airscan:e0:Canon imageFORMULA R10",
+            Type = "unix:///run/ipp-usb.sock"
+        };
+
+        var result = SaneScanDriver.ShouldExcludeDeviceByLocalIP(device, new HashSet<string> { "127.0.0.1" });
+
+        Assert.False(result);
+    }
+
+    [Fact]
+    public void ShouldExcludeDeviceByLocalIP_AirscanNonLoopbackLocalIp()
+    {
+        var device = new SaneDeviceInfo
+        {
+            Name = "airscan:e0:HP LaserJet",
+            Type = "ip=10.0.0.5"
+        };
+
+        var result = SaneScanDriver.ShouldExcludeDeviceByLocalIP(device, new HashSet<string> { "10.0.0.5" });
+
+        Assert.True(result);
+    }
+
+    [Fact]
+    public void ShouldExcludeDeviceByLocalIP_IpNotInLocalSet()
+    {
+        var device = new SaneDeviceInfo
+        {
+            Name = "escl:http://192.168.1.50:50000/eSCL"
+        };
+
+        // 192.168.1.50 is not in localIPs, so should not be excluded
+        var result = SaneScanDriver.ShouldExcludeDeviceByLocalIP(device, new HashSet<string> { "192.168.1.1" });
+
+        Assert.False(result);
+    }
+
+    [Fact]
+    public void ShouldExcludeDeviceByLocalIP_NonEsclOrAirscanBackend()
+    {
+        var device = new SaneDeviceInfo
+        {
+            Name = "pixma:04A91833_0A1B2C"
+        };
+
+        // pixma backend has no IP to extract
+        var result = SaneScanDriver.ShouldExcludeDeviceByLocalIP(device, new HashSet<string> { "127.0.0.1", "192.168.1.1" });
+
+        Assert.False(result);
+    }
+
+    [Fact]
+    public void ShouldExcludeDeviceByLocalIP_EsclIPv6Loopback()
+    {
+        var device = new SaneDeviceInfo
+        {
+            Name = "escl:http://[::1]:50000/eSCL"
+        };
+
+        var result = SaneScanDriver.ShouldExcludeDeviceByLocalIP(device, new HashSet<string> { "::1" });
+
+        Assert.False(result);
+    }
+
     private static void SetupDeviceMock(ISaneDevice deviceMock, int? lines = null)
     {
         deviceMock.GetParameters().Returns(new SaneReadParameters

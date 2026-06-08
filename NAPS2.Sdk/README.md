@@ -117,6 +117,28 @@ Each platform has a default driver (WIA on Windows, Apple on Mac, and SANE on Li
 var devices = await controller.GetDeviceList(Driver.Twain);
 ```
 
+### Ubuntu USB Scanner Diagnostics
+
+When a scanner is not detected on Ubuntu/Linux, confirm how the device is exposed before changing app code:
+
+1. Confirm the USB device is visible to the OS:
+   - `lsusb`
+2. Check whether SANE can find a scanner:
+   - `sane-find-scanner`
+   - `scanimage -L`
+3. Check whether it is exposed through eSCL/AirScan (including IPP-over-USB bridges):
+   - `scanimage -L` (look for `airscan`/`escl` backends)
+
+If the device is only accessible through proprietary vendor software and does not appear through SANE or eSCL/AirScan, it requires a new backend/driver effort rather than a small NAPS2 integration change.
+
+For Canon imageFORMULA R10 specifically, current Linux reports indicate it does not enumerate as a usable SANE/eSCL device and instead relies on Canon's proprietary CaptureOnTouch Lite workflow. Treat support as a backend-level project, not an SDK configuration change.
+
+### Linux Packaging and Permissions Notes
+
+- Native Linux packages require a working `libsane` installation.
+- Installing `sane-airscan` is recommended for network/eSCL device discovery.
+- Flatpak builds require USB access and host filesystem visibility for host SANE backends.
+
 ### Worker Processes
 
 Using the TWAIN driver on Windows usually requires the calling process to be 32-bit. If you want to use TWAIN from a 64-bit process, NAPS2 provides a 32-bit worker process:

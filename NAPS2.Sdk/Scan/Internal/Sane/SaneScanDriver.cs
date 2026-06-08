@@ -252,13 +252,9 @@ internal class SaneScanDriver : IScanDriver
         var backend = GetBackend(device.Name);
         if (backend == "escl")
         {
-            // Name is in the form "escl:http://xx.xx.xx.xx:yy"
-            int separatorIndex = device.Name.IndexOf(":", StringComparison.InvariantCulture);
-            if (separatorIndex == -1)
-            {
-                return null;
-            }
-            if (Uri.TryCreate(device.Name.Substring(separatorIndex + 1), UriKind.Absolute, out var uri))
+            // Name is in the form "escl:http://xx.xx.xx.xx:yy/..."
+            // The backend name already contains a colon, so the first colon is at index 4.
+            if (Uri.TryCreate(device.Name.Substring(device.Name.IndexOf(':') + 1), UriKind.Absolute, out var uri))
             {
                 return uri.Host;
             }

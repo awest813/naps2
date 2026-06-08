@@ -24,6 +24,8 @@ public class HowToRunScannerTests
     //   - Reconnect scanner and verify rediscovery
     //
     // Canon imageFORMULA R10 note:
-    // If the scanner appears only as a proprietary USB device and not via SANE/eSCL on Ubuntu,
-    // this is a backend/driver gap and not something the current NAPS2 scanner test harness can enable.
+    // The R10 can be used on Linux via ipp-usb (a USB-to-IPP bridge daemon).
+    // Install ipp-usb (`apt install ipp-usb`), ensure it is running, and reconnect the scanner.
+    // The device should then appear via the SANE airscan backend or the ESCL driver at a loopback address.
+    // If it still does not appear, confirm with `scanimage -L` that airscan/escl lists it.
 } 

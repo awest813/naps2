@@ -1,4 +1,5 @@
 ﻿using System.Collections.Immutable;
+using System.Net;
 using System.Threading;
 using Microsoft.Extensions.Logging;
 using NAPS2.Images.Bitwise;
@@ -36,7 +37,7 @@ internal class SaneScanDriver : IScanDriver
 
         void MaybeCallback(SaneDeviceInfo device)
         {
-            if (options.ExcludeLocalIPs && GetIP(device) is { } ip && localIPsTask!.Result.Contains(ip))
+            if (options.ExcludeLocalIPs && ShouldExcludeDeviceByLocalIP(device, localIPsTask!.Result))
             {
                 return;
             }
@@ -237,19 +238,39 @@ internal class SaneScanDriver : IScanDriver
         return $"{device.Model} ({backend})";
     }
 
-    private string? GetIP(SaneDeviceInfo device)
+    internal static bool ShouldExcludeDeviceByLocalIP(SaneDeviceInfo device, ISet<string> localIPs)
+    {
+        if (GetIP(device) is not { } ip || !localIPs.Contains(ip))
+        {
+            return false;
+        }
+        return !IPAddress.TryParse(ip, out var parsedIP) || !IPAddress.IsLoopback(parsedIP);
+    }
+
+    private static string? GetIP(SaneDeviceInfo device)
     {
         var backend = GetBackend(device.Name);
         if (backend == "escl")
         {
             // Name is in the form "escl:http://xx.xx.xx.xx:yy"
-            var uri = new Uri(device.Name.Substring(device.Name.IndexOf(":", StringComparison.InvariantCulture) + 1));
-            return uri.Host;
+            int separatorIndex = device.Name.IndexOf(":", StringComparison.InvariantCulture);
+            if (separatorIndex == -1)
+            {
+                return null;
+            }
+            if (Uri.TryCreate(device.Name.Substring(separatorIndex + 1), UriKind.Absolute, out var uri))
+            {
+                return uri.Host;
+            }
+            return null;
         }
         if (backend == "airscan")
         {
             // Type is in the form "ip=xx.xx.xx.xx"
-            return device.Type.Substring(3);
+            if (device.Type.StartsWith("ip=", StringComparison.OrdinalIgnoreCase))
+            {
+                return device.Type.Substring(3);
+            }
         }
         return null;
     }

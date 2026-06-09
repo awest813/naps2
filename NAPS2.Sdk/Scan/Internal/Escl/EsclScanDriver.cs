@@ -53,8 +53,7 @@ internal class EsclScanDriver : IScanDriver
             // Exclude devices at local (non-loopback) IPs to avoid showing the same device twice when it is
             // shared via ScanServer. Loopback-addressed devices are kept because they represent USB scanners
             // bridged by ipp-usb, which is not a ScanServer-shared device.
-            if (options.ExcludeLocalIPs && localIPsTask!.Result.Contains(ip.ToString()) &&
-                !System.Net.IPAddress.IsLoopback(ip))
+            if (options.ExcludeLocalIPs && LocalIPsHelper.ShouldExcludeByLocalIP(ip, localIPsTask!.Result))
             {
                 return;
             }

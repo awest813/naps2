@@ -137,7 +137,8 @@ For Canon imageFORMULA R10 on Linux: the scanner can be made available through N
 
 - Native Linux packages require a working `libsane` installation.
 - Installing `sane-airscan` is recommended for network/eSCL device discovery.
-- Flatpak builds require USB access and host filesystem visibility for host SANE backends.
+- Installing `ipp-usb` is recommended for USB scanners (such as the Canon imageFORMULA R10) that expose an eSCL/AirScan endpoint via a loopback bridge.
+- Flatpak builds require USB access and host filesystem visibility for host SANE backends. For ipp-usb-bridged USB scanners, install and run `ipp-usb` on the host system so the device appears through the host's `airscan` backend.
 
 ### Worker Processes
 

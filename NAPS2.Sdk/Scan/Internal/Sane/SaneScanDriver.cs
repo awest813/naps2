@@ -1,5 +1,4 @@
 ﻿using System.Collections.Immutable;
-using System.Net;
 using System.Threading;
 using Microsoft.Extensions.Logging;
 using NAPS2.Images.Bitwise;
@@ -220,7 +219,7 @@ internal class SaneScanDriver : IScanDriver
     private static ScanDevice GetScanDevice(SaneDeviceInfo device) =>
         new(Driver.Sane, device.Name, GetName(device));
 
-    private static string GetName(SaneDeviceInfo device)
+    internal static string GetName(SaneDeviceInfo device)
     {
         var backend = GetBackend(device.Name);
         // Special cases for sane-escl and sane-airscan.
@@ -232,19 +231,31 @@ internal class SaneScanDriver : IScanDriver
         }
         if (backend == "airscan")
         {
-            // We include the device type which has the IP address.
-            return $"{device.Model} ({backend}:{device.Type})";
+            return $"{device.Model} ({backend}:{FormatAirscanConnection(device.Type)})";
         }
         return $"{device.Model} ({backend})";
     }
 
+    internal static string FormatAirscanConnection(string type)
+    {
+        if (type.StartsWith("ip=", StringComparison.OrdinalIgnoreCase))
+        {
+            return type.Substring(3);
+        }
+        if (type.StartsWith("unix:", StringComparison.OrdinalIgnoreCase))
+        {
+            return "USB";
+        }
+        return type;
+    }
+
     internal static bool ShouldExcludeDeviceByLocalIP(SaneDeviceInfo device, ISet<string> localIPs)
     {
-        if (GetIP(device) is not { } ip || !localIPs.Contains(ip))
+        if (GetIP(device) is not { } ip)
         {
             return false;
         }
-        return !IPAddress.TryParse(ip, out var parsedIP) || !IPAddress.IsLoopback(parsedIP);
+        return LocalIPsHelper.ShouldExcludeByLocalIP(ip, localIPs);
     }
 
     private static string? GetIP(SaneDeviceInfo device)

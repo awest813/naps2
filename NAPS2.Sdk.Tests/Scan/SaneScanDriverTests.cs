@@ -281,6 +281,41 @@ public class SaneScanDriverTests : ContextualTests
         Assert.False(result);
     }
 
+    [Theory]
+    [InlineData("ip=127.0.0.1", "127.0.0.1")]
+    [InlineData("unix:///run/ipp-usb.sock", "USB")]
+    [InlineData("mdns:foo", "mdns:foo")]
+    public void FormatAirscanConnection(string type, string expected)
+    {
+        Assert.Equal(expected, SaneScanDriver.FormatAirscanConnection(type));
+    }
+
+    [Fact]
+    public void GetName_AirscanLoopbackIp()
+    {
+        var device = new SaneDeviceInfo
+        {
+            Name = "airscan:e0:Canon imageFORMULA R10",
+            Model = "Canon imageFORMULA R10",
+            Type = "ip=127.0.0.1"
+        };
+
+        Assert.Equal("Canon imageFORMULA R10 (airscan:127.0.0.1)", SaneScanDriver.GetName(device));
+    }
+
+    [Fact]
+    public void GetName_AirscanIppUsbSocket()
+    {
+        var device = new SaneDeviceInfo
+        {
+            Name = "airscan:e0:Canon imageFORMULA R10",
+            Model = "Canon imageFORMULA R10",
+            Type = "unix:///run/ipp-usb.sock"
+        };
+
+        Assert.Equal("Canon imageFORMULA R10 (airscan:USB)", SaneScanDriver.GetName(device));
+    }
+
     private static void SetupDeviceMock(ISaneDevice deviceMock, int? lines = null)
     {
         deviceMock.GetParameters().Returns(new SaneReadParameters

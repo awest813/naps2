@@ -1,3 +1,7 @@
+Changes in 8.2.2:
+- Linux: Fixed USB scanners bridged by ipp-usb (e.g. Canon imageFORMULA R10) being hidden when ScanServer deduplication is active
+- Linux: Improved display names for airscan devices connected via ipp-usb
+
 Changes in 8.2.1:
 - Added a review prompt in the Microsoft Store version after a month's use
 - Windows: Added TWAIN support to arm64 installer

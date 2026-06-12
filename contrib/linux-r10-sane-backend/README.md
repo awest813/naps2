@@ -73,16 +73,21 @@ printf '\n# imageFORMULA R10\noption duplex-offset 320\nusb 0x1083 0xXXXX\n' | \
 
 ```bash
 sudo apt install git autoconf automake libtool autoconf-archive autopoint gettext pkg-config libusb-1.0-0-dev
-git clone --depth 1 https://gitlab.com/sane-project/backends.git
-cd backends
-git apply /path/to/canon_dr-r10.patch
-./autogen.sh && BACKENDS="canon_dr" ./configure --prefix="$HOME/sane-r10" && make && make install
-# Test with the freshly built backend (system otherwise untouched):
-SANE_CONFIG_DIR="$HOME/sane-r10/etc/sane.d" LD_LIBRARY_PATH="$HOME/sane-r10/lib" \
-    "$HOME/sane-r10/bin/scanimage" -L
+./build-patched-backend.sh
 ```
 
-Remember to uncomment/fill in the R10 usb line in `$HOME/sane-r10/etc/sane.d/canon_dr.conf`.
+This clones sane-backends, applies `canon_dr-r10.patch`, builds just the `canon_dr`
+backend into `$HOME/sane-r10` (the system SANE install is untouched), adds the
+scanner's usb id to the isolated config if the device is plugged in, and creates a
+`$HOME/sane-r10/bin/r10-scanimage` wrapper. Then:
+
+```bash
+~/sane-r10/bin/r10-scanimage -L
+~/sane-r10/bin/r10-scanimage --format=png -o /tmp/r10-test.png   # paper loaded
+```
+
+The script is idempotent — after editing `backend/canon_dr.c` in
+`$HOME/sane-backends-r10` to try different settings, just re-run it.
 
 If scans are still wrong, the knobs to iterate on are in the R10 block of
 `backend/canon_dr.c` (`gray_interlace`, `color_interlace`, `duplex_interlace`) and the
@@ -100,6 +105,17 @@ https://gitlab.com/sane-project/backends/-/issues with:
 
 That lets the R10 be added to `canon_dr.conf.in` and `doc/descriptions/canon_dr.desc`
 properly so every Linux user gets it out of the box.
+
+## Upstream context
+
+- The R40 was added in exactly the shape of `canon_dr-r10.patch` (model block + conf +
+  desc) by an outside contributor: commit
+  [`b8df4a0c`](https://gitlab.com/sane-project/backends/-/commit/b8df4a0cf6d6511e6a019ce490e7742af1414f0e)
+  "canon_dr: Add basic support for Canon R40 scanner".
+- Open upstream requests for this scanner family:
+  [#768 (R30)](https://gitlab.com/sane-project/backends/-/issues/768) and
+  [#799 (R40 follow-up)](https://gitlab.com/sane-project/backends/-/issues/799) — data
+  gathered here (especially the R10's usb product id) should be cross-posted there.
 
 ## NAPS2 integration
 

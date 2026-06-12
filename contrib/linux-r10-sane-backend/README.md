@@ -28,9 +28,26 @@ the R10 hypothesis can be tested on a stock distro without compiling anything.
   3. tests whether the stock `canon_dr` backend attaches to it, using a temporary
      SANE config — no system files are modified.
 - `canon_dr-r10.patch` — patch against [sane-project/backends](https://gitlab.com/sane-project/backends)
-  master adding an R10 model block to `canon_dr` (cloned from the confirmed R40 block,
-  same hardware generation). Compiles cleanly; the image-geometry settings (interlacing,
-  duplex offset) are a starting hypothesis to refine against real scans.
+  master adding an R10/R30 model block to `canon_dr` (cloned from the confirmed R40
+  block, same hardware family). Compiles cleanly; the image-geometry settings
+  (interlacing, duplex offset) are a starting hypothesis to refine against real scans.
+  The R30's usb id (`0x1083 0x1686`) is confirmed from the `lsusb` output in upstream
+  issue #768, so the patch enables the R30 out of the box; the R10's id still needs to
+  be read off a real device (`r10-probe.sh` does this).
+- `build-patched-backend.sh` — one-command build of the patched backend into an
+  isolated prefix (see Step 3 below).
+
+Known USB ids in this scanner family (vendor `0x1083`, Canon Electronics):
+
+| Model | Product id | canon_dr status |
+|---|---|---|
+| P-215 | 0x1646 | supported |
+| P-208 | 0x164c | supported |
+| P-215II | 0x165b | supported |
+| P-208II | 0x165f | supported |
+| R40 | 0x1679 | supported (confirmed) |
+| R30 | 0x1686 | experimental (this patch) |
+| R10 | **unknown** — likely near 0x1679 | experimental (this patch; id needed) |
 
 ## Test procedure
 

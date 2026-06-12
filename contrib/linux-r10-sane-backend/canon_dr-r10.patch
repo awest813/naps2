@@ -1,13 +1,14 @@
 diff --git a/backend/canon_dr.c b/backend/canon_dr.c
-index d22188c..27ca8d0 100644
+index d22188ce..0f3ff7f5 100644
 --- a/backend/canon_dr.c
 +++ b/backend/canon_dr.c
-@@ -1549,6 +1549,34 @@ init_model (struct scanner *s)
+@@ -1549,6 +1549,35 @@ init_model (struct scanner *s)
      s->has_df_ultra = 1;
    }
  
-+  /* copied from R40 (same hardware generation), not yet confirmed */
++  /* R10/R30: copied from R40 (same hardware family), not yet confirmed */
 +  else if (strstr (s->model_name,"R10")
++   || strstr (s->model_name,"R30")
 +  ){
 +    s->gray_interlace[SIDE_FRONT] = GRAY_INTERLACE_C120_LR;
 +    s->gray_interlace[SIDE_BACK] = GRAY_INTERLACE_C120;
@@ -38,10 +39,10 @@ index d22188c..27ca8d0 100644
    else if (strstr (s->model_name,"DR-3010")){
      s->rgb_format = 1;
 diff --git a/backend/canon_dr.conf.in b/backend/canon_dr.conf.in
-index 399ed27..30c0084 100644
+index 399ed270..09cbbfe0 100644
 --- a/backend/canon_dr.conf.in
 +++ b/backend/canon_dr.conf.in
-@@ -218,3 +218,8 @@ usb 0x1083 0x165f
+@@ -218,3 +218,12 @@ usb 0x1083 0x165f
  # R40
  option duplex-offset 320
  usb 0x1083 0x1679
@@ -50,3 +51,21 @@ index 399ed27..30c0084 100644
 +# Canon Electronics 0x1083 device; protocol believed to match the R40)
 +#option duplex-offset 320
 +#usb 0x1083 0xXXXX
++
++# R30
++option duplex-offset 320
++usb 0x1083 0x1686
+diff --git a/doc/descriptions/canon_dr.desc b/doc/descriptions/canon_dr.desc
+index b1f663b6..b8e93df5 100644
+--- a/doc/descriptions/canon_dr.desc
++++ b/doc/descriptions/canon_dr.desc
+@@ -419,3 +419,9 @@
+ :usbid "0x1083" "0x1679"
+ :status :basic
+ :comment "Letter-size ADF. Hardware provides: Gray/Color, Simplex/Duplex, Full-width, 300/600dpi horizontal, with front mirrored horizontally. Driver provides: Binary, Despeckle, Deskew, Cropping, Calibration, other resolutions. Multistream unsupported."
++
++:model "R30"
++:interface "USB"
++:usbid "0x1083" "0x1686"
++:status :untested
++:comment "Same hardware family as R40; experimental support using R40-derived settings."

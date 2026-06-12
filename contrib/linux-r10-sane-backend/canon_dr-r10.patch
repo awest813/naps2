@@ -1,0 +1,52 @@
+diff --git a/backend/canon_dr.c b/backend/canon_dr.c
+index d22188c..27ca8d0 100644
+--- a/backend/canon_dr.c
++++ b/backend/canon_dr.c
+@@ -1549,6 +1549,34 @@ init_model (struct scanner *s)
+     s->has_df_ultra = 1;
+   }
+ 
++  /* copied from R40 (same hardware generation), not yet confirmed */
++  else if (strstr (s->model_name,"R10")
++  ){
++    s->gray_interlace[SIDE_FRONT] = GRAY_INTERLACE_C120_LR;
++    s->gray_interlace[SIDE_BACK] = GRAY_INTERLACE_C120;
++    s->color_interlace[SIDE_FRONT] = COLOR_INTERLACE_C120_LR;
++    s->color_interlace[SIDE_BACK] = COLOR_INTERLACE_C120;
++    s->duplex_interlace = DUPLEX_INTERLACE_2510;
++    /*s->duplex_offset = 320; now set in config file*/
++    s->fixed_width = 1;
++    s->need_ccal = 1;
++    s->fcal_src = FCAL_SRC_SCAN;
++    s->fcal_dest = FCAL_DEST_SW;
++    s->rgb_format = 1;
++    s->sw_lut = 1;
++
++    /*only in Y direction, so we trash them in X*/
++    s->std_res_x[DPI_100]=0;
++    s->std_res_x[DPI_150]=0;
++    s->std_res_x[DPI_200]=0;
++    s->std_res_x[DPI_240]=0;
++    s->std_res_x[DPI_400]=0;
++
++    /* suspected settings */
++    s->ccal_version = 3;
++    s->has_df_ultra = 1;
++  }
++
+   /* copied from 2510, possibly incorrect */
+   else if (strstr (s->model_name,"DR-3010")){
+     s->rgb_format = 1;
+diff --git a/backend/canon_dr.conf.in b/backend/canon_dr.conf.in
+index 399ed27..30c0084 100644
+--- a/backend/canon_dr.conf.in
++++ b/backend/canon_dr.conf.in
+@@ -218,3 +218,8 @@ usb 0x1083 0x165f
+ # R40
+ option duplex-offset 320
+ usb 0x1083 0x1679
++
++# R10 (uncomment and set the product id shown by `lsusb` for the
++# Canon Electronics 0x1083 device; protocol believed to match the R40)
++#option duplex-offset 320
++#usb 0x1083 0xXXXX

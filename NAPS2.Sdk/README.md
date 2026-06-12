@@ -131,7 +131,12 @@ When a scanner is not detected on Ubuntu/Linux, confirm how the device is expose
 
 If the device is only accessible through proprietary vendor software and does not appear through SANE or eSCL/AirScan, it requires a new backend/driver effort rather than a small NAPS2 integration change.
 
-For Canon imageFORMULA R10 on Linux: the scanner can be made available through NAPS2 via the `ipp-usb` USB-to-IPP bridge. Install the `ipp-usb` package (`apt install ipp-usb` on Ubuntu), ensure the daemon is running, and reconnect the scanner. `ipp-usb` bridges the USB device to an eSCL/AirScan endpoint accessible at a loopback address (e.g. `127.0.0.1`). Both the SANE `airscan` backend and the ESCL driver in NAPS2 will then discover the scanner. NAPS2 preserves loopback-addressed devices from the local-IP filter, so the R10 will appear alongside network scanners even when the ScanServer deduplication option is active.
+For Canon imageFORMULA R10 on Linux: the scanner can be made available through NAPS2 via the `ipp-usb` USB-to-IPP bridge. Install the `ipp-usb` package (`apt install ipp-usb` on Ubuntu), ensure the daemon is running, and reconnect the scanner. `ipp-usb` bridges the USB device to an eSCL/AirScan endpoint accessible at a loopback address (`http://127.0.0.1:60000` upwards). The scanner is then discovered in two ways:
+
+- The SANE driver lists it through the `airscan` backend (install `sane-airscan`).
+- The ESCL driver probes the ipp-usb port range on localhost directly, since ipp-usb only advertises via mDNS on the loopback interface, which multicast discovery doesn't see. The device appears with a "(USB)" suffix.
+
+NAPS2 also preserves loopback-addressed devices from the local-IP filter, so the R10 will appear alongside network scanners even when the ScanServer deduplication option is active.
 
 ### Linux Packaging and Permissions Notes
 

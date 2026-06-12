@@ -1,4 +1,5 @@
 Changes in 8.2.2:
+- Linux: The ESCL driver now finds USB scanners bridged by ipp-usb (e.g. Canon imageFORMULA R10) by probing the ipp-usb localhost ports, as ipp-usb only advertises on the loopback interface where mDNS discovery can't see it
 - Linux: Fixed USB scanners bridged by ipp-usb (e.g. Canon imageFORMULA R10) being hidden when ScanServer deduplication is active
 - Linux: Improved display names for airscan devices connected via ipp-usb
 

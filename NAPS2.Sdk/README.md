@@ -131,13 +131,22 @@ When a scanner is not detected on Ubuntu/Linux, confirm how the device is expose
 
 If the device is only accessible through proprietary vendor software and does not appear through SANE or eSCL/AirScan, it requires a new backend/driver effort rather than a small NAPS2 integration change.
 
-For Canon imageFORMULA R10 on Linux: the scanner can be made available through NAPS2 via the `ipp-usb` USB-to-IPP bridge. Install the `ipp-usb` package (`apt install ipp-usb` on Ubuntu), ensure the daemon is running, and reconnect the scanner. `ipp-usb` bridges the USB device to an eSCL/AirScan endpoint accessible at a loopback address (e.g. `127.0.0.1`). Both the SANE `airscan` backend and the ESCL driver in NAPS2 will then discover the scanner. NAPS2 preserves loopback-addressed devices from the local-IP filter, so the R10 will appear alongside network scanners even when the ScanServer deduplication option is active.
+For USB scanners that implement IPP-over-USB (such as eSCL-capable devices), the scanner can be made available through NAPS2 via the `ipp-usb` USB-to-IPP bridge. Install the `ipp-usb` package (`apt install ipp-usb` on Ubuntu), ensure the daemon is running, and reconnect the scanner. `ipp-usb` bridges the USB device to an eSCL/AirScan endpoint accessible at a loopback address (`http://127.0.0.1:60000` upwards). The scanner is then discovered in two ways:
+
+- The SANE driver lists it through the `airscan` backend (install `sane-airscan`).
+- The ESCL driver probes the ipp-usb port range on localhost directly, since ipp-usb only advertises via mDNS on the loopback interface, which multicast discovery doesn't see. The device appears with a "(USB)" suffix.
+
+NAPS2 also preserves loopback-addressed devices from the local-IP filter, so such devices will appear alongside network scanners even when the ScanServer deduplication option is active.
+
+`ipp-usb` only works for devices that expose a USB IPP interface (interface class 7, subclass 1, protocol 4). To check whether a device has one, run `lsusb` to find its bus/device number, then `sudo lsusb -v -s <bus>:<dev>` and look for `bInterfaceClass 7` / `bInterfaceSubClass 1` / `bInterfaceProtocol 4`.
+
+Note on the Canon imageFORMULA R10 specifically: Canon documents the R10 as a driverless plug-and-play device operated only by its onboard CaptureOnTouch Lite software (Windows/macOS), Canon's official OS support list does not include Linux, and SANE has no backend for it. Unless the `lsusb` check above shows an IPP-over-USB interface, the R10 cannot be bridged by `ipp-usb`. However, SANE's `canon_dr` backend supports the R10's close relatives (P-208/P-215 and the same-generation R40), so the most promising route is teaching `canon_dr` about the R10 — see [contrib/linux-r10-sane-backend](../contrib/linux-r10-sane-backend/README.md) for a probe script and a work-in-progress backend patch.
 
 ### Linux Packaging and Permissions Notes
 
 - Native Linux packages require a working `libsane` installation.
 - Installing `sane-airscan` is recommended for network/eSCL device discovery.
-- Installing `ipp-usb` is recommended for USB scanners (such as the Canon imageFORMULA R10) that expose an eSCL/AirScan endpoint via a loopback bridge.
+- Installing `ipp-usb` is recommended for USB scanners with an IPP-over-USB interface, which it exposes as an eSCL/AirScan endpoint via a loopback bridge.
 - Flatpak builds require USB access and host filesystem visibility for host SANE backends. For ipp-usb-bridged USB scanners, install and run `ipp-usb` on the host system so the device appears through the host's `airscan` backend.
 
 ### Worker Processes

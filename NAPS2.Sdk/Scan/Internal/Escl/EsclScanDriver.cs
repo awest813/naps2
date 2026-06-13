@@ -46,26 +46,52 @@ internal class EsclScanDriver : IScanDriver
     {
         // TODO: Run location in a persistent background service
         var localIPsTask = options.ExcludeLocalIPs ? LocalIPsHelper.Get() : null;
-        using var locator = new EsclServiceLocator(service =>
+        // Devices found both via mDNS and the ipp-usb probe are deduplicated by UUID
+        var seenUuids = new HashSet<string>();
+
+        bool MarkUuidSeen(string uuid)
         {
-            // TODO: Consider limiting available devices by security policy
-            var ip = service.IpV4 ?? service.IpV6!;
-            // Exclude devices at local (non-loopback) IPs to avoid showing the same device twice when it is
-            // shared via ScanServer. Loopback-addressed devices are kept because they represent USB scanners
-            // bridged by ipp-usb, which is not a ScanServer-shared device.
-            if (options.ExcludeLocalIPs && LocalIPsHelper.ShouldExcludeByLocalIP(ip, localIPsTask!.Result))
+            lock (seenUuids)
             {
-                return;
+                return seenUuids.Add(IppUsbEsclLocator.NormalizeUuid(uuid));
             }
-            var id = service.Uuid;
-            var name = string.IsNullOrEmpty(service.ScannerName)
-                ? $"{ip}"
-                : $"{service.ScannerName} ({ip})";
-            var client = new EsclClient(service);
-            callback(new ScanDevice(Driver.Escl, id, name, client.IconUri, client.ConnectionUri));
-        });
-        locator.Logger = _logger;
-        locator.Start();
+        }
+
+        EsclServiceLocator? locator = null;
+        try
+        {
+            locator = new EsclServiceLocator(service =>
+            {
+                // TODO: Consider limiting available devices by security policy
+                var ip = service.IpV4 ?? service.IpV6!;
+                // Exclude devices at local (non-loopback) IPs to avoid showing the same device twice when it is
+                // shared via ScanServer. Loopback-addressed devices are kept because they represent USB scanners
+                // bridged by ipp-usb, which is not a ScanServer-shared device.
+                if (options.ExcludeLocalIPs && LocalIPsHelper.ShouldExcludeByLocalIP(ip, localIPsTask!.Result))
+                {
+                    return;
+                }
+                var id = service.Uuid;
+                if (!MarkUuidSeen(id))
+                {
+                    return;
+                }
+                var name = string.IsNullOrEmpty(service.ScannerName)
+                    ? $"{ip}"
+                    : $"{service.ScannerName} ({ip})";
+                var client = new EsclClient(service);
+                callback(new ScanDevice(Driver.Escl, id, name, client.IconUri, client.ConnectionUri));
+            });
+            locator.Logger = _logger;
+            locator.Start();
+        }
+        catch (Exception ex)
+        {
+            // mDNS may be unavailable (e.g. no network interfaces); ipp-usb devices can still be found below
+            _logger.LogDebug(ex, "Error starting ESCL mDNS discovery");
+        }
+        using var locatorForDisposal = locator;
+        var ippUsbTask = GetIppUsbDevices(options, cancelToken, callback, MarkUuidSeen);
         try
         {
             await Task.Delay(options.EsclOptions.SearchTimeout, cancelToken);
@@ -73,6 +99,36 @@ internal class EsclScanDriver : IScanDriver
         catch (TaskCanceledException)
         {
         }
+        await ippUsbTask;
+    }
+
+    private async Task GetIppUsbDevices(ScanOptions options, CancellationToken cancelToken,
+        Action<ScanDevice> callback, Func<string, bool> markUuidSeen)
+    {
+#if NET6_0_OR_GREATER
+        // ipp-usb is a Linux daemon (USB scanners on Mac/Windows are covered by other drivers)
+        if (!OperatingSystem.IsLinux()) return;
+        try
+        {
+            var endpoints = await new IppUsbEsclLocator().ProbeEndpoints(
+                options.EsclOptions.SecurityPolicy, _logger, cancelToken);
+            foreach (var endpoint in endpoints)
+            {
+                var device = IppUsbEsclLocator.CreateScanDevice(endpoint);
+                if (!markUuidSeen(device.ID))
+                {
+                    continue;
+                }
+                callback(device);
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogDebug(ex, "Error probing for ipp-usb ESCL devices");
+        }
+#else
+        await Task.CompletedTask;
+#endif
     }
 
     public async Task<ScanCaps> GetCaps(ScanOptions options, CancellationToken cancelToken)
@@ -283,7 +339,21 @@ internal class EsclScanDriver : IScanDriver
             client = new EsclClient(new Uri(options.Device.ConnectionUri));
             SetUpClient();
             var capsTask = client.GetCapabilities();
-            await Task.WhenAny(capsTask, serviceTask);
+            var completedTask = await Task.WhenAny(capsTask, serviceTask);
+            if (completedTask == serviceTask && await serviceTask == null)
+            {
+                // mDNS won't find the device (e.g. it's unavailable, or this is an ipp-usb device that only
+                // advertises on loopback), so wait for the direct connection attempt to finish
+                try
+                {
+                    return (client, await capsTask);
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogDebug(ex, "Error connecting to ESCL device directly at {Uri}",
+                        options.Device.ConnectionUri);
+                }
+            }
             if (capsTask.Status == TaskStatus.RanToCompletion)
             {
                 return (client, await capsTask);
@@ -293,11 +363,46 @@ internal class EsclScanDriver : IScanDriver
         // If we have no known connection info (or failed to connect with it), use the mDNS response for the client
         var service = await serviceTask;
         if (cancelToken.IsCancellationRequested) return (null, null);
-        if (service == null) throw new DeviceOfflineException();
+        if (service == null)
+        {
+            // mDNS discovery doesn't cover USB devices bridged by ipp-usb (which advertises on loopback only), so
+            // before giving up, probe the ipp-usb port range in case the device is there with a changed port.
+            var ippUsbEndpoint = await FindIppUsbEndpoint(deviceId, options, cancelToken);
+            if (cancelToken.IsCancellationRequested) return (null, null);
+            if (ippUsbEndpoint == null) throw new DeviceOfflineException();
+            client = ippUsbEndpoint.Client;
+            SetUpClient();
+            MaybeSendNewUris();
+            return (client, ippUsbEndpoint.Capabilities);
+        }
         client = new EsclClient(service);
         MaybeSendNewUris();
         SetUpClient();
         return (client, await client.GetCapabilities());
+    }
+
+    private async Task<IppUsbEsclEndpoint?> FindIppUsbEndpoint(string deviceId, ScanOptions options,
+        CancellationToken cancelToken)
+    {
+#if NET6_0_OR_GREATER
+        if (!OperatingSystem.IsLinux()) return null;
+        try
+        {
+            var endpoints = await new IppUsbEsclLocator().ProbeEndpoints(
+                options.EsclOptions.SecurityPolicy, _logger, cancelToken);
+            return endpoints.FirstOrDefault(endpoint =>
+                endpoint.Capabilities.Uuid is { } uuid &&
+                IppUsbEsclLocator.NormalizeUuid(uuid) == IppUsbEsclLocator.NormalizeUuid(deviceId));
+        }
+        catch (Exception ex)
+        {
+            _logger.LogDebug(ex, "Error probing for ipp-usb ESCL devices");
+            return null;
+        }
+#else
+        await Task.CompletedTask;
+        return null;
+#endif
     }
 
     private async Task<EsclJob> CreateScanJobAndCorrectInvalidSettings(EsclClient client, EsclScanSettings scanSettings)
@@ -412,17 +517,29 @@ internal class EsclScanDriver : IScanDriver
     {
         var foundTcs = new TaskCompletionSource<EsclService?>();
         var deviceUuid = GetUuid(options.Device!);
-        using var locator = new EsclServiceLocator(service =>
+        EsclServiceLocator? locator = null;
+        try
         {
-            if (service.Uuid == deviceUuid)
+            locator = new EsclServiceLocator(service =>
             {
-                foundTcs.TrySetResult(service);
-            }
-        });
-        Task.Delay(options.EsclOptions.SearchTimeout, cancelToken)
-            .ContinueWith(_ => foundTcs.TrySetResult(null)).AssertNoAwait();
-        locator.Logger = _scanningContext.Logger;
-        locator.Start();
+                if (service.Uuid == deviceUuid)
+                {
+                    foundTcs.TrySetResult(service);
+                }
+            });
+            Task.Delay(options.EsclOptions.SearchTimeout, cancelToken)
+                .ContinueWith(_ => foundTcs.TrySetResult(null)).AssertNoAwait();
+            locator.Logger = _scanningContext.Logger;
+            locator.Start();
+        }
+        catch (Exception ex)
+        {
+            // mDNS may be unavailable (e.g. no network interfaces); the caller can still connect via the device's
+            // ConnectionUri or the ipp-usb fallback
+            _logger.LogDebug(ex, "Error starting ESCL mDNS discovery");
+            foundTcs.TrySetResult(null);
+        }
+        using var locatorForDisposal = locator;
         return await foundTcs.Task;
     }
 

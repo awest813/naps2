@@ -19,12 +19,45 @@ The `canon_dr` backend chooses model-specific behavior from the product string t
 device reports via INQUIRY, and attaches to any USB id listed in `canon_dr.conf` — so
 the R10 hypothesis can be tested on a stock distro without compiling anything.
 
+## The #1 gotcha: "Auto Start" / mass-storage mode
+
+This whole scanner family (P-150, P-208, P-215, and almost certainly the R-series) ships
+with an **Auto Start** feature: by default the device enumerates as a **USB Mass Storage**
+disk exposing the onboard CaptureOnTouch Lite installer, and presents **no scanning
+interface at all**. In that mode `canon_dr` (and any SANE backend) simply cannot see a
+scanner. Upstream documents this for the P-150 and P-208, which each have *two* USB
+product ids — one per switch position — with the auto-start position marked
+`:status :unsupported` and the note *"the mode switch on the scanner is in the wrong
+position, you must move the switch."*
+
+So the very first thing to determine is **which mode the R10 is in**. `r10-probe.sh`
+detects this and tells you. If it reports only a Mass Storage interface (class 8), you
+must switch the device to scanner mode before anything else can work:
+
+- look for a physical **Auto Start** switch on the scanner and set it to **OFF**; or
+- on a Windows/Mac machine, open CaptureOnTouch and disable "Auto Start" /
+  "CaptureOnTouch Lite" — the setting is stored in the device's NVRAM, so it persists
+  after you move the scanner back to Linux.
+
+Then replug and re-probe. **The USB product id changes with the mode**, so please record
+both ids (auto-start and scanner) if you can — both are useful upstream.
+
+## A second possibility: the wrong vendor id
+
+The R10 is expected on vendor id `0x1083` (Canon Electronics), like the R40/R30/P-215.
+There is a slim chance it instead enumerates under `0x04a9` (Canon Inc.) with a Genesys
+Logic chip, in which case the `genesys` backend — not `canon_dr` — would be the
+candidate. `r10-probe.sh` checks both vendor ids and points you at `genesys` if it sees
+the `0x04a9` case.
+
 ## Contents
 
 - `r10-probe.sh` — run this first on the machine with the R10 plugged in. It:
-  1. finds the device and reports its USB product id (needed for the upstream patch),
-  2. dumps its USB interfaces (and tells you if the much-simpler `ipp-usb` route is
-     available, i.e. an interface with class 7 / subclass 1 / protocol 4),
+  1. finds the device under either Canon vendor id (`0x1083` or `0x04a9`) and reports
+     its USB id (the key fact the patch needs),
+  2. dumps its USB interfaces and classifies the device: IPP-over-USB (→ `ipp-usb`
+     route), mass-storage-only (→ Auto Start mode, must switch first — see above),
+     vendor-specific (→ canon_dr-compatible), or `0x04a9`+Genesys (→ `genesys` route),
   3. tests whether the stock `canon_dr` backend attaches to it, using a temporary
      SANE config — no system files are modified.
 - `canon_dr-r10.patch` — patch against [sane-project/backends](https://gitlab.com/sane-project/backends)
@@ -47,7 +80,10 @@ Known USB ids in this scanner family (vendor `0x1083`, Canon Electronics):
 | P-208II | 0x165f | supported |
 | R40 | 0x1679 | supported (confirmed) |
 | R30 | 0x1686 | experimental (this patch) |
-| R10 | **unknown** — likely near 0x1679 | experimental (this patch; id needed) |
+| R10 | **unknown** — likely near 0x1679; reports product string "CANON R10" | experimental (this patch; id needed) |
+
+(The R10's product id still needs reading off a real device. Note that mass-storage
+"Auto Start" mode and scanner mode report *different* ids, so there may be two.)
 
 ## Test procedure
 
@@ -62,10 +98,12 @@ Possible outcomes:
 
 | Probe result | Meaning | Next step |
 |---|---|---|
+| Mass-storage-only interface | Auto Start mode | Switch the scanner to scanner mode (see "#1 gotcha" above), replug, re-probe |
 | IPP-over-USB interface found | `ipp-usb` can bridge it | `sudo apt install ipp-usb`; NAPS2's ESCL driver finds it automatically |
 | `canon_dr` attaches, scan looks right | Protocol matches, defaults are fine | Make the config permanent (below); report success upstream |
 | `canon_dr` attaches, scan garbled/striped | Protocol matches, model quirks needed | Build the patched backend (below) |
-| `canon_dr` doesn't attach | Different protocol | Capture a debug log + USB trace; real reverse-engineering needed |
+| `canon_dr` doesn't attach, `0x04a9`+GL chip | Genesys Logic device | Try the `genesys` backend (`SANE_DEBUG_GENESYS=5 scanimage -L`) |
+| `canon_dr` doesn't attach, scanner mode | Different protocol | Capture a debug log + USB trace; real reverse-engineering needed |
 
 If you get a USB permission error, either re-run with `sudo` or add a udev rule:
 
